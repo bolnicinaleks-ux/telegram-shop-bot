@@ -326,13 +326,15 @@ async def cmd_stats(message: Message, db: Database, cfg: Config) -> None:
     await message.answer("\n".join(lines))
 
 
-# Кнопки статуса работают у админов и у всех участников рабочей группы
+# Кнопки статуса работают у админов, у участников рабочей группы и (в демо-режиме) у автора заказа
 @router.callback_query(kb.OrderCb.filter())
 async def change_status(cb: CallbackQuery, callback_data: kb.OrderCb, db: Database, cfg: Config, bot: Bot) -> None:
     in_orders_chat = (
         cfg.orders_chat_id is not None and cb.message is not None and cb.message.chat.id == cfg.orders_chat_id
     )
-    if cb.from_user.id not in cfg.admin_ids and not in_orders_chat:
+    current = await db.get_order(callback_data.id)
+    own_demo = cfg.demo_mode and current is not None and current["user_id"] == cb.from_user.id
+    if cb.from_user.id not in cfg.admin_ids and not in_orders_chat and not own_demo:
         await cb.answer("Нет доступа", show_alert=True)
         return
     if callback_data.s not in STATUSES:

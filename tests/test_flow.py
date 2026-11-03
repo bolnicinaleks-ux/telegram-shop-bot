@@ -329,6 +329,32 @@ async def scenario(cfg: Config, db: Database) -> None:
     assert "устарела" in s.alerts()[-1]
     print("✔ минимальная сумма, лимит заказов, рабочая группа, устаревшие кнопки")
 
+    # 10. Демо-режим: копия карточки владельца, статус только своего заказа, без реквизитов оплаты
+    await feed(msg(CLIENT2, "/start"), demo_mode=True)
+    assert "демо-магазин" in s.last_text(CLIENT2)
+    await feed(press(CLIENT2, "pc:add:1:1:0", photo=True), demo_mode=True)
+    await feed(press(CLIENT2, "ct:checkout:0"), demo_mode=True)
+    for text in ("Борис", "+77771112233", "🚶 Самовывоз", "⏭ Пропустить"):
+        await feed(msg(CLIENT2, text), demo_mode=True)
+    summary = s.last_text(CLIENT2)
+    assert "оплачивать ничего не нужно" in summary and "Kaspi" not in summary
+    await feed(press(CLIENT2, "co:place"), demo_mode=True)
+    demo_id = (await db.all_orders())[-1]["id"]
+    assert f"Заказ #{demo_id}" in s.last_text(CLIENT2)
+    assert any("увидит владелец" in m.text for m in s.of(SendMessage, chat_id=CLIENT2)[-3:])
+    await feed(press(CLIENT2, f"or:{demo_id}:confirmed"))
+    assert s.alerts()[-1] == "Нет доступа"  # без демо-режима
+    await feed(press(STRANGER, f"or:{demo_id}:confirmed"), demo_mode=True)
+    assert s.alerts()[-1] == "Нет доступа"  # чужой заказ
+    await feed(press(CLIENT2, "or:1:cancelled"), demo_mode=True)
+    assert s.alerts()[-1] == "Нет доступа"
+    await feed(press(CLIENT2, f"or:{demo_id}:shipped"), demo_mode=True)
+    assert s.last_text(CLIENT2) == f"Ваш заказ #{demo_id} готов к выдаче"
+    assert len(await db.order_messages(demo_id)) == 2
+    await feed(msg(CLIENT2, "/add"), demo_mode=True)
+    assert "Новый товар" not in s.last_text(CLIENT2)
+    print("✔ демо-режим: копия карточки владельца, статус только своего заказа, без реквизитов")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

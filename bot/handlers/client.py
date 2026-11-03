@@ -10,7 +10,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from bot import keyboards as kb
 from bot.config import Config
 from bot.db import Database
-from bot.delivery import deliver_order, notify_admins, refresh_order_cards, safe_delete
+from bot.delivery import deliver_order, notify_admins, refresh_order_cards, safe_delete, send_order_card
 from bot.states import Checkout
 from bot.utils import (
     cart_totals,
@@ -26,6 +26,12 @@ from bot.utils import (
 )
 
 router = Router(name="client")
+
+DEMO_NOTE = (
+    "\n\n🧪 <b>Это демо-магазин</b> — оплачивать ничего не нужно. После заказа вы получите копию карточки, "
+    "которую видит владелец, и сможете сами менять статус заказа."
+)
+DEMO_PAYMENT = "🧪 Это демо-заказ — оплачивать ничего не нужно."
 
 EMPTY_CART_KB = InlineKeyboardMarkup(
     inline_keyboard=[[InlineKeyboardButton(text=kb.BTN_CATALOG, callback_data=kb.MenuCb(to="cats").pack())]]
@@ -129,7 +135,9 @@ def _checkout_text(data: dict, items, items_total: int, delivery_price: int, cfg
     ]
     if data.get("comment"):
         parts.append(f"💬 {escape(data['comment'])}")
-    if cfg.payment_info:
+    if cfg.demo_mode:
+        parts += ["", DEMO_PAYMENT]
+    elif cfg.payment_info:
         parts += ["", f"💳 {escape(cfg.payment_info)}"]
     return "\n".join(parts)
 
@@ -148,7 +156,8 @@ async def cmd_start(message: Message, state: FSMContext, cfg: Config) -> None:
     await state.clear()
     await message.answer(
         f"Добро пожаловать в <b>{escape(cfg.shop_name)}</b>!\n\n"
-        f"{kb.BTN_CATALOG} — товары\n{kb.BTN_CART} — ваша корзина\n{kb.BTN_ORDERS} — статусы заказов",
+        f"{kb.BTN_CATALOG} — товары\n{kb.BTN_CART} — ваша корзина\n{kb.BTN_ORDERS} — статусы заказов"
+        + (DEMO_NOTE if cfg.demo_mode else ""),
         reply_markup=kb.main_menu(),
     )
 
@@ -419,7 +428,11 @@ async def place_order(cb: CallbackQuery, state: FSMContext, db: Database, cfg: C
         f"✅ <b>Заказ #{order_id} оформлен!</b>\n\n{text}\n\nМы свяжемся с вами для подтверждения."
     )
     await cb.answer()
-    await deliver_order(bot, db, cfg, await db.get_order(order_id))
+    order = await db.get_order(order_id)
+    await deliver_order(bot, db, cfg, order)
+    if cfg.demo_mode and user.id not in cfg.order_targets:
+        await cb.message.answer("👀 <b>Так заказ увидит владелец</b> — кнопки статуса работают:")
+        await send_order_card(bot, db, cfg, order, user.id)
 
 
 @router.callback_query(kb.ConfirmCb.filter(F.a == "cancel"))

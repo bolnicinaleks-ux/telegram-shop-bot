@@ -25,6 +25,7 @@ class Config:
     free_delivery_from: int
     min_order: int
     max_orders_per_hour: int
+    demo_mode: bool = False
 
     @property
     def order_targets(self) -> list[int]:
@@ -59,6 +60,7 @@ def load_config() -> Config:
         free_delivery_from=int(os.getenv("FREE_DELIVERY_FROM", "0")),
         min_order=int(os.getenv("MIN_ORDER", "0")),
         max_orders_per_hour=int(os.getenv("MAX_ORDERS_PER_HOUR", "5")),
+        demo_mode=os.getenv("DEMO_MODE", "0").strip().lower() in ("1", "true", "yes"),
     )
     if not cfg.admin_ids:
         raise RuntimeError("ADMIN_IDS пуст — некому управлять каталогом")
