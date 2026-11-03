@@ -1,5 +1,7 @@
 # Telegram-бот магазин: каталог, корзина, заказы
 
+<p align="center"><img src="docs/demo.gif" width="320" alt="Демо: каталог, корзина и заказ с доставкой"></p>
+
 aiogram 3 · SQLite (aiosqlite) · Docker
 
 ## Возможности
