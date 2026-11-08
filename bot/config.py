@@ -4,6 +4,8 @@ from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 
+from bot.i18n import _
+
 
 def _parse_ints(value: str) -> frozenset[int]:
     return frozenset(int(v) for v in value.replace(" ", "").split(",") if v)
@@ -52,7 +54,7 @@ def load_config() -> Config:
         db_path=os.getenv("DB_PATH", "data/bot.db"),
         tz=ZoneInfo(os.getenv("TIMEZONE", "Asia/Almaty")),
         currency=os.getenv("CURRENCY", "₸"),
-        shop_name=os.getenv("SHOP_NAME", "Магазин"),
+        shop_name=os.getenv("SHOP_NAME", _("Магазин")),
         payment_info=os.getenv("PAYMENT_INFO", "").replace("\\n", "\n"),
         pickup_address=os.getenv("PICKUP_ADDRESS", ""),
         delivery_enabled=os.getenv("DELIVERY_ENABLED", "1").strip() not in ("0", "", "false", "no"),

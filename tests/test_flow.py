@@ -2,7 +2,11 @@
 
 Запуск: python -m tests.test_flow
 """
-import asyncio
+import os
+
+os.environ.setdefault("BOT_LANG", "ru")  # тест проверяет русские тексты (test_en ставит en)
+
+import asyncio  # noqa: E402
 import csv
 import dataclasses
 import io

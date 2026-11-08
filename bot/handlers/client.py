@@ -10,6 +10,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from bot import keyboards as kb
 from bot.config import Config
 from bot.db import Database
+from bot.i18n import _
 from bot.delivery import deliver_order, notify_admins, refresh_order_cards, safe_delete, send_order_card
 from bot.states import Checkout
 from bot.utils import (
@@ -27,11 +28,11 @@ from bot.utils import (
 
 router = Router(name="client")
 
-DEMO_NOTE = (
+DEMO_NOTE = _(
     "\n\n🧪 <b>Это демо-магазин</b> — оплачивать ничего не нужно. После заказа вы получите копию карточки, "
     "которую видит владелец, и сможете сами менять статус заказа."
 )
-DEMO_PAYMENT = "🧪 Это демо-заказ — оплачивать ничего не нужно."
+DEMO_PAYMENT = _("🧪 Это демо-заказ — оплачивать ничего не нужно.")
 
 EMPTY_CART_KB = InlineKeyboardMarkup(
     inline_keyboard=[[InlineKeyboardButton(text=kb.BTN_CATALOG, callback_data=kb.MenuCb(to="cats").pack())]]
@@ -43,9 +44,9 @@ EMPTY_CART_KB = InlineKeyboardMarkup(
 async def _send_categories(message: Message, db: Database) -> None:
     categories = await db.visible_categories()
     if not categories:
-        await message.answer("Каталог пока пуст.", reply_markup=kb.main_menu())
+        await message.answer(_("Каталог пока пуст."), reply_markup=kb.main_menu())
         return
-    await message.answer("Выберите категорию:", reply_markup=kb.categories_kb(categories))
+    await message.answer(_("Выберите категорию:"), reply_markup=kb.categories_kb(categories))
 
 
 async def _send_product(message: Message, db: Database, cfg: Config, user_id: int, cat_id: int, i: int) -> None:
@@ -65,7 +66,7 @@ async def _send_product(message: Message, db: Database, cfg: Config, user_id: in
 async def _cart_view(db: Database, cfg: Config, user_id: int) -> tuple[str, InlineKeyboardMarkup]:
     items = await db.cart_items(user_id)
     if not items:
-        return "🛒 Корзина пуста.", EMPTY_CART_KB
+        return _("🛒 Корзина пуста."), EMPTY_CART_KB
     total, unavailable = cart_totals(items, cfg)
     lines = []
     for it in items:
@@ -75,14 +76,15 @@ async def _cart_view(db: Database, cfg: Config, user_id: int) -> tuple[str, Inli
                 f"{fmt_price(it['price'] * it['qty'], cfg.currency)}"
             )
         else:
-            lines.append(f"• <s>{escape(it['name'])}</s> — недоступен")
-    text = "<b>Корзина</b>\n\n" + "\n".join(lines) + f"\n\n<b>Сумма: {fmt_price(total, cfg.currency)}</b>"
+            lines.append(_("• <s>{name}</s> — недоступен", name=escape(it["name"])))
+    text = (_("<b>Корзина</b>") + "\n\n" + "\n".join(lines) + "\n\n"
+            + _("<b>Сумма: {sum}</b>", sum=fmt_price(total, cfg.currency)))
     if cfg.delivery_enabled and cfg.free_delivery_from:
-        text += f"\nБесплатная доставка от {fmt_price(cfg.free_delivery_from, cfg.currency)}"
+        text += "\n" + _("Бесплатная доставка от {sum}", sum=fmt_price(cfg.free_delivery_from, cfg.currency))
     if cfg.min_order and total < cfg.min_order:
-        text += f"\n❗ Минимальная сумма заказа — {fmt_price(cfg.min_order, cfg.currency)}"
+        text += "\n" + _("❗ Минимальная сумма заказа — {sum}", sum=fmt_price(cfg.min_order, cfg.currency))
     if unavailable:
-        text += "\n❗ Уберите недоступные товары, чтобы оформить заказ."
+        text += "\n" + _("❗ Уберите недоступные товары, чтобы оформить заказ.")
     return text, kb.cart_kb(items)
 
 
@@ -98,33 +100,33 @@ async def _edit_cart(message: Message, db: Database, cfg: Config, user_id: int) 
 async def _my_orders_view(db: Database, cfg: Config, user_id: int) -> tuple[str, InlineKeyboardMarkup | None]:
     orders = await db.user_orders(user_id)
     if not orders:
-        return "У вас пока нет заказов.", None
+        return _("У вас пока нет заказов."), None
     blocks = []
     for o in orders:
         items = await db.order_items(o["id"])
         blocks.append(order_short(o, cfg) + "\n" + escape(", ".join(f"{i['name']} × {i['qty']}" for i in items)))
-    return "<b>Ваши заказы</b>\n\n" + "\n\n".join(blocks), kb.my_orders_kb(orders)
+    return _("<b>Ваши заказы</b>") + "\n\n" + "\n\n".join(blocks), kb.my_orders_kb(orders)
 
 
 async def _checkout_problem(db: Database, cfg: Config, user_id: int) -> str | None:
     """Почему нельзя оформить корзину (или None, если можно)."""
     items = await db.cart_items(user_id)
     if not items:
-        return "Корзина пуста."
+        return _("Корзина пуста.")
     total, unavailable = cart_totals(items, cfg)
     if unavailable:
-        return "В корзине есть недоступные товары — уберите их."
+        return _("В корзине есть недоступные товары — уберите их.")
     if cfg.min_order and total < cfg.min_order:
-        return f"Минимальная сумма заказа — {fmt_price(cfg.min_order, cfg.currency)}."
+        return _("Минимальная сумма заказа — {sum}.", sum=fmt_price(cfg.min_order, cfg.currency))
     since = now_local(cfg) - timedelta(hours=1)
     if await db.count_orders_since(user_id, since) >= cfg.max_orders_per_hour:
-        return "Слишком много заказов за последний час. Попробуйте позже."
+        return _("Слишком много заказов за последний час. Попробуйте позже.")
     return None
 
 
 def _checkout_text(data: dict, items, items_total: int, delivery_price: int, cfg: Config) -> str:
     parts = [
-        "<b>Ваш заказ</b>",
+        _("<b>Ваш заказ</b>"),
         "",
         items_lines(items, cfg),
         "",
@@ -155,8 +157,8 @@ async def _calc(db: Database, cfg: Config, user_id: int, delivery: str):
 async def cmd_start(message: Message, state: FSMContext, cfg: Config) -> None:
     await state.clear()
     await message.answer(
-        f"Добро пожаловать в <b>{escape(cfg.shop_name)}</b>!\n\n"
-        f"{kb.BTN_CATALOG} — товары\n{kb.BTN_CART} — ваша корзина\n{kb.BTN_ORDERS} — статусы заказов"
+        _("Добро пожаловать в <b>{shop}</b>!\n\n{catalog} — товары\n{cart} — ваша корзина\n{orders} — статусы заказов",
+          shop=escape(cfg.shop_name), catalog=kb.BTN_CATALOG, cart=kb.BTN_CART, orders=kb.BTN_ORDERS)
         + (DEMO_NOTE if cfg.demo_mode else ""),
         reply_markup=kb.main_menu(),
     )
@@ -217,11 +219,11 @@ async def browse(cb: CallbackQuery, callback_data: kb.BrowseCb, db: Database, cf
 async def card_cart(cb: CallbackQuery, callback_data: kb.CardCb, db: Database) -> None:
     p = await db.get_product(callback_data.p)
     if p is None or p["hidden"] or p["deleted"]:
-        await cb.answer("Товар больше недоступен", show_alert=True)
+        await cb.answer(_("Товар больше недоступен"), show_alert=True)
         return
     adding = callback_data.a in ("add", "inc")
     if adding and not p["in_stock"]:
-        await cb.answer("Нет в наличии", show_alert=True)
+        await cb.answer(_("Нет в наличии"), show_alert=True)
         return
     qty = await db.cart_change(cb.from_user.id, p["id"], 1 if adding else -1)
 
@@ -233,7 +235,7 @@ async def card_cart(cb: CallbackQuery, callback_data: kb.CardCb, db: Database) -
     except TelegramBadRequest as e:
         if "message is not modified" not in str(e):
             raise
-    await cb.answer(f"В корзине: {qty} шт" if qty else "Убрано из корзины")
+    await cb.answer(_("В корзине: {n} шт", n=qty) if qty else _("Убрано из корзины"))
 
 
 # --- Корзина ---
@@ -258,7 +260,7 @@ async def cart_edit(cb: CallbackQuery, callback_data: kb.CartCb, db: Database, c
     else:
         p = await db.get_product(callback_data.p)
         if p is None or not is_available(p):
-            await cb.answer("Товар недоступен", show_alert=True)
+            await cb.answer(_("Товар недоступен"), show_alert=True)
             await _edit_cart(cb.message, db, cfg, uid)
             return
         await db.cart_change(uid, p["id"], 1)
@@ -277,7 +279,7 @@ async def checkout_start(cb: CallbackQuery, state: FSMContext, db: Database, cfg
     await state.set_state(Checkout.name)
     last = await db.last_contact(cb.from_user.id)
     await cb.message.answer(
-        "<b>Оформление заказа</b>\n\nКак к вам обращаться?",
+        _("<b>Оформление заказа</b>\n\nКак к вам обращаться?"),
         reply_markup=kb.input_kb(last["client_name"] if last else None),
     )
 
@@ -287,20 +289,20 @@ async def checkout_start(cb: CallbackQuery, state: FSMContext, db: Database, cfg
 @router.message(StateFilter(Checkout), F.text == kb.BTN_CANCEL)
 async def checkout_cancel(message: Message, state: FSMContext) -> None:
     await state.clear()
-    await message.answer("Оформление отменено. Товары остались в корзине.", reply_markup=kb.main_menu())
+    await message.answer(_("Оформление отменено. Товары остались в корзине."), reply_markup=kb.main_menu())
 
 
 @router.message(Checkout.name, F.text)
 async def checkout_name(message: Message, state: FSMContext, db: Database) -> None:
     name = " ".join(message.text.split())
     if not 2 <= len(name) <= 50 or name.startswith("/"):
-        await message.answer("Имя должно быть от 2 до 50 символов.")
+        await message.answer(_("Имя должно быть от 2 до 50 символов."))
         return
     await state.update_data(client_name=name)
     await state.set_state(Checkout.phone)
     last = await db.last_contact(message.from_user.id)
     await message.answer(
-        "Номер телефона — кнопкой ниже или текстом:",
+        _("Номер телефона — кнопкой ниже или текстом:"),
         reply_markup=kb.input_kb(last["phone"] if last else None, contact=True),
     )
 
@@ -308,7 +310,7 @@ async def checkout_name(message: Message, state: FSMContext, db: Database) -> No
 async def _after_phone(message: Message, state: FSMContext, db: Database, cfg: Config) -> None:
     if cfg.delivery_enabled:
         await state.set_state(Checkout.delivery)
-        await message.answer("Как получить заказ?", reply_markup=kb.delivery_kb())
+        await message.answer(_("Как получить заказ?"), reply_markup=kb.delivery_kb())
     else:
         await state.update_data(delivery="pickup", address=None)
         await _ask_comment(message, state)
@@ -316,14 +318,14 @@ async def _after_phone(message: Message, state: FSMContext, db: Database, cfg: C
 
 async def _ask_comment(message: Message, state: FSMContext) -> None:
     await state.set_state(Checkout.comment)
-    await message.answer("Комментарий к заказу (необязательно):", reply_markup=kb.input_kb(skip=True))
+    await message.answer(_("Комментарий к заказу (необязательно):"), reply_markup=kb.input_kb(skip=True))
 
 
 @router.message(Checkout.phone, F.contact | F.text)
 async def checkout_phone(message: Message, state: FSMContext, db: Database, cfg: Config) -> None:
     phone = normalize_phone(message.contact.phone_number if message.contact else message.text)
     if phone is None:
-        await message.answer("Не похоже на номер телефона. Пример: +7 701 123 45 67")
+        await message.answer(_("Не похоже на номер телефона. Пример: +7 701 123 45 67"))
         return
     await state.update_data(phone=phone)
     await _after_phone(message, state, db, cfg)
@@ -339,18 +341,18 @@ async def checkout_delivery(message: Message, state: FSMContext, db: Database) -
         await state.set_state(Checkout.address)
         last = await db.last_contact(message.from_user.id)
         await message.answer(
-            "Адрес доставки (город, улица, дом, квартира):",
+            _("Адрес доставки (город, улица, дом, квартира):"),
             reply_markup=kb.input_kb(last["address"] if last and last["address"] else None),
         )
     else:
-        await message.answer("Выберите способ получения кнопкой ниже.")
+        await message.answer(_("Выберите способ получения кнопкой ниже."))
 
 
 @router.message(Checkout.address, F.text)
 async def checkout_address(message: Message, state: FSMContext) -> None:
     address = message.text.strip()
     if not 5 <= len(address) <= 300:
-        await message.answer("Адрес должен быть от 5 до 300 символов.")
+        await message.answer(_("Адрес должен быть от 5 до 300 символов."))
         return
     await state.update_data(address=address)
     await _ask_comment(message, state)
@@ -363,7 +365,7 @@ async def checkout_comment(message: Message, state: FSMContext, db: Database, cf
     else:
         comment = message.text.strip()
         if len(comment) > 500:
-            await message.answer("Комментарий — не длиннее 500 символов.")
+            await message.answer(_("Комментарий — не длиннее 500 символов."))
             return
     await state.update_data(comment=comment)
 
@@ -376,18 +378,18 @@ async def checkout_comment(message: Message, state: FSMContext, db: Database, cf
     items, items_total, delivery_price = await _calc(db, cfg, message.from_user.id, data["delivery"])
     await state.update_data(expected_total=items_total + delivery_price)
     await state.set_state(Checkout.confirm)
-    await message.answer("Проверьте заказ 👇", reply_markup=kb.main_menu())
+    await message.answer(_("Проверьте заказ 👇"), reply_markup=kb.main_menu())
     await message.answer(_checkout_text(data, items, items_total, delivery_price, cfg), reply_markup=kb.confirm_kb())
 
 
 @router.message(Checkout.confirm)
 async def checkout_confirm_hint(message: Message) -> None:
-    await message.answer("Нажмите «✅ Подтвердить заказ» под сводкой.")
+    await message.answer(_("Нажмите «✅ Подтвердить заказ» под сводкой."))
 
 
 @router.message(StateFilter(Checkout))
 async def checkout_wrong_input(message: Message) -> None:
-    await message.answer("Ответьте текстом или нажмите «✖️ Отмена».")
+    await message.answer(_("Ответьте текстом или нажмите «✖️ Отмена»."))
 
 
 @router.callback_query(Checkout.confirm, kb.ConfirmCb.filter(F.a == "place"))
@@ -396,7 +398,7 @@ async def place_order(cb: CallbackQuery, state: FSMContext, db: Database, cfg: C
     problem = await _checkout_problem(db, cfg, user.id)
     if problem:
         await state.clear()
-        await cb.message.edit_text(f"Заказ не оформлен: {problem}")
+        await cb.message.edit_text(_("Заказ не оформлен: {problem}", problem=problem))
         await cb.answer()
         return
 
@@ -405,8 +407,10 @@ async def place_order(cb: CallbackQuery, state: FSMContext, db: Database, cfg: C
     text = _checkout_text(data, items, items_total, delivery_price, cfg)
     if items_total + delivery_price != data["expected_total"]:
         await state.update_data(expected_total=items_total + delivery_price)
-        await cb.message.edit_text(f"{text}\n\n❗ <b>Сумма изменилась</b> — проверьте заказ ещё раз.", reply_markup=kb.confirm_kb())
-        await cb.answer("Сумма изменилась", show_alert=True)
+        await cb.message.edit_text(
+            f"{text}\n\n" + _("❗ <b>Сумма изменилась</b> — проверьте заказ ещё раз."), reply_markup=kb.confirm_kb()
+        )
+        await cb.answer(_("Сумма изменилась"), show_alert=True)
         return
 
     order_id = await db.create_order(
@@ -425,20 +429,21 @@ async def place_order(cb: CallbackQuery, state: FSMContext, db: Database, cfg: C
     )
     await state.clear()
     await cb.message.edit_text(
-        f"✅ <b>Заказ #{order_id} оформлен!</b>\n\n{text}\n\nМы свяжемся с вами для подтверждения."
+        _("✅ <b>Заказ #{id} оформлен!</b>", id=order_id) + f"\n\n{text}\n\n"
+        + _("Мы свяжемся с вами для подтверждения.")
     )
     await cb.answer()
     order = await db.get_order(order_id)
     await deliver_order(bot, db, cfg, order)
     if cfg.demo_mode and user.id not in cfg.order_targets:
-        await cb.message.answer("👀 <b>Так заказ увидит владелец</b> — кнопки статуса работают:")
+        await cb.message.answer(_("👀 <b>Так заказ увидит владелец</b> — кнопки статуса работают:"))
         await send_order_card(bot, db, cfg, order, user.id)
 
 
 @router.callback_query(kb.ConfirmCb.filter(F.a == "cancel"))
 async def cancel_checkout(cb: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
-    await cb.message.edit_text("Оформление отменено. Товары остались в корзине.")
+    await cb.message.edit_text(_("Оформление отменено. Товары остались в корзине."))
     await cb.answer()
 
 
@@ -454,9 +459,9 @@ async def _own_new_order(db: Database, user_id: int, order_id: int):
 @router.callback_query(kb.MyOrderCb.filter(F.a == "cancel"))
 async def my_order_cancel(cb: CallbackQuery, callback_data: kb.MyOrderCb, db: Database) -> None:
     if await _own_new_order(db, cb.from_user.id, callback_data.id) is None:
-        await cb.answer("Заказ уже нельзя отменить — напишите нам", show_alert=True)
+        await cb.answer(_("Заказ уже нельзя отменить — напишите нам"), show_alert=True)
         return
-    await cb.message.edit_text(f"Отменить заказ #{callback_data.id}?", reply_markup=kb.my_cancel_confirm_kb(callback_data.id))
+    await cb.message.edit_text(_("Отменить заказ #{id}?", id=callback_data.id), reply_markup=kb.my_cancel_confirm_kb(callback_data.id))
     await cb.answer()
 
 
@@ -466,12 +471,12 @@ async def my_order_cancel_yes(
 ) -> None:
     order = await _own_new_order(db, cb.from_user.id, callback_data.id)
     if order is None or not await db.set_status(order["id"], "cancelled", now_local(cfg), only_from="new"):
-        await cb.answer("Заказ уже нельзя отменить — напишите нам", show_alert=True)
+        await cb.answer(_("Заказ уже нельзя отменить — напишите нам"), show_alert=True)
         return
-    await cb.message.edit_text(f"Заказ #{order['id']} отменён.")
+    await cb.message.edit_text(_("Заказ #{id} отменён.", id=order["id"]))
     await cb.answer()
     await refresh_order_cards(bot, db, cfg, await db.get_order(order["id"]))
-    await notify_admins(bot, cfg, f"❌ Клиент отменил заказ #{order['id']}")
+    await notify_admins(bot, cfg, _("❌ Клиент отменил заказ #{id}", id=order["id"]))
 
 
 @router.callback_query(kb.MyOrderCb.filter(F.a == "back"))
@@ -483,4 +488,4 @@ async def my_orders_back(cb: CallbackQuery, db: Database, cfg: Config) -> None:
 
 @router.callback_query()
 async def stale_callback(cb: CallbackQuery) -> None:
-    await cb.answer("Кнопка устарела. Откройте /catalog", show_alert=True)
+    await cb.answer(_("Кнопка устарела. Откройте /catalog"), show_alert=True)

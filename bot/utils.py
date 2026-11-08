@@ -3,25 +3,28 @@ from datetime import datetime
 from html import escape
 
 from bot.config import Config
+from bot.i18n import LANG, _
 
 DT_FMT = "%Y-%m-%d %H:%M"
+MONTHS_SHORT_EN = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
 STATUSES = {
-    "new": "🆕 Новый",
-    "confirmed": "👍 Подтверждён",
-    "shipped": "📦 Отправлен",
-    "done": "✅ Выполнен",
-    "cancelled": "❌ Отменён",
+    "new": _("🆕 Новый"),
+    "confirmed": _("👍 Подтверждён"),
+    "shipped": _("📦 Отправлен"),
+    "done": _("✅ Выполнен"),
+    "cancelled": _("❌ Отменён"),
 }
 STATUS_PLAIN = {
-    "new": "Новый", "confirmed": "Подтверждён", "shipped": "Отправлен", "done": "Выполнен", "cancelled": "Отменён",
+    "new": _("Новый"), "confirmed": _("Подтверждён"), "shipped": _("Отправлен"), "done": _("Выполнен"),
+    "cancelled": _("Отменён"),
 }
 
 
 def client_status_text(status: str, delivery: str) -> str | None:
     if status == "shipped":
-        return "передан в доставку" if delivery == "delivery" else "готов к выдаче"
-    return {"confirmed": "подтверждён", "done": "выполнен. Спасибо за покупку!", "cancelled": "отменён"}.get(status)
+        return _("передан в доставку") if delivery == "delivery" else _("готов к выдаче")
+    return {"confirmed": _("подтверждён"), "done": _("выполнен. Спасибо за покупку!"), "cancelled": _("отменён")}.get(status)
 
 
 def now_local(cfg: Config) -> datetime:
@@ -33,10 +36,15 @@ def dt_to_str(dt: datetime) -> str:
 
 
 def fmt_created(value: str) -> str:
-    return datetime.strptime(value, DT_FMT).strftime("%d.%m.%Y %H:%M")
+    dt = datetime.strptime(value, DT_FMT)
+    if LANG == "en":
+        return f"{MONTHS_SHORT_EN[dt.month - 1]} {dt.day}, {dt:%Y %H:%M}"
+    return dt.strftime("%d.%m.%Y %H:%M")
 
 
 def fmt_price(amount: int, currency: str) -> str:
+    if LANG == "en":
+        return f"{currency}{amount:,}" if currency in ("$", "€", "£") else f"{amount:,} {currency}"
     return f"{amount:,}".replace(",", " ") + f" {currency}"
 
 
@@ -66,17 +74,17 @@ def product_caption(p, cfg: Config) -> str:
     if p["description"]:
         text += f"\n\n{escape(p['description'])}"
     if not p["in_stock"]:
-        text += "\n\n❗ Нет в наличии"
+        text += "\n\n" + _("❗ Нет в наличии")
     return text
 
 
 def admin_caption(p, cfg: Config) -> str:
     flags = []
     if p["deleted"]:
-        flags.append("🗑 удалён")
+        flags.append(_("🗑 удалён"))
     if p["hidden"]:
-        flags.append("🙈 скрыт")
-    flags.append("✅ в наличии" if p["in_stock"] else "❌ нет в наличии")
+        flags.append(_("🙈 скрыт"))
+    flags.append(_("✅ в наличии") if p["in_stock"] else _("❌ нет в наличии"))
     return (
         f"<b>#{p['id']}</b> · {escape(p['category_name'])}\n"
         f"{product_caption(p, cfg)}\n\n"
@@ -98,17 +106,17 @@ def items_lines(items, cfg: Config) -> str:
 
 
 def totals_lines(items_total: int, delivery_price: int, delivery: str, cfg: Config) -> str:
-    lines = [f"Товары: {fmt_price(items_total, cfg.currency)}"]
+    lines = [_("Товары: {sum}", sum=fmt_price(items_total, cfg.currency))]
     if delivery == "delivery":
-        lines.append("Доставка: " + (fmt_price(delivery_price, cfg.currency) if delivery_price else "бесплатно"))
-    lines.append(f"<b>Итого: {fmt_price(items_total + delivery_price, cfg.currency)}</b>")
+        lines.append(_("Доставка: {sum}", sum=fmt_price(delivery_price, cfg.currency) if delivery_price else _("бесплатно")))
+    lines.append(_("<b>Итого: {sum}</b>", sum=fmt_price(items_total + delivery_price, cfg.currency)))
     return "\n".join(lines)
 
 
 def delivery_line(delivery: str, address: str | None, cfg: Config) -> str:
     if delivery == "delivery":
-        return f"🚚 Доставка: {escape(address or '')}"
-    return "🚶 Самовывоз" + (f": {escape(cfg.pickup_address)}" if cfg.pickup_address else "")
+        return _("🚚 Доставка: {address}", address=escape(address or ""))
+    return _("🚶 Самовывоз") + (f": {escape(cfg.pickup_address)}" if cfg.pickup_address else "")
 
 
 def tg_contact(order) -> str:
@@ -119,7 +127,7 @@ def tg_contact(order) -> str:
 
 def order_card(order, items, cfg: Config) -> str:
     parts = [
-        f"<b>Заказ #{order['id']}</b> · {STATUSES[order['status']]}",
+        _("<b>Заказ #{id}</b>", id=order["id"]) + f" · {STATUSES[order['status']]}",
         f"{fmt_created(order['created_at'])} · {tg_contact(order)}",
         "",
         f"👤 {escape(order['client_name'])}, {escape(order['phone'])}",

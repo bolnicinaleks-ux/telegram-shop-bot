@@ -10,19 +10,20 @@ from aiogram.types import BotCommand, BotCommandScopeChat
 
 from bot.config import Config, load_config
 from bot.db import Database
+from bot.i18n import _
 from bot.handlers import admin, client
 
 CLIENT_COMMANDS = [
-    BotCommand(command="catalog", description="Каталог"),
-    BotCommand(command="cart", description="Корзина"),
-    BotCommand(command="myorders", description="Мои заказы"),
+    BotCommand(command="catalog", description=_("Каталог")),
+    BotCommand(command="cart", description=_("Корзина")),
+    BotCommand(command="myorders", description=_("Мои заказы")),
 ]
 ADMIN_COMMANDS = CLIENT_COMMANDS + [
-    BotCommand(command="admin", description="Админ-панель"),
-    BotCommand(command="add", description="Добавить товар"),
-    BotCommand(command="products", description="Товары"),
-    BotCommand(command="orders", description="Заказы"),
-    BotCommand(command="stats", description="Статистика"),
+    BotCommand(command="admin", description=_("Админ-панель")),
+    BotCommand(command="add", description=_("Добавить товар")),
+    BotCommand(command="products", description=_("Товары")),
+    BotCommand(command="orders", description=_("Заказы")),
+    BotCommand(command="stats", description=_("Статистика")),
 ]
 
 

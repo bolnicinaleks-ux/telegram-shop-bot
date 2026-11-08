@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS orders (
 CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status, created_at);
 
--- Название и цена фиксируются на момент заказа
+-- name and price are frozen at order time
 CREATE TABLE IF NOT EXISTS order_items (
     order_id   INTEGER NOT NULL REFERENCES orders(id),
     product_id INTEGER NOT NULL,

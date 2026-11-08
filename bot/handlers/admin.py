@@ -11,6 +11,7 @@ from aiogram.types import BufferedInputFile, CallbackQuery, Message
 from bot import keyboards as kb
 from bot.config import Config
 from bot.db import Database
+from bot.i18n import _
 from bot.delivery import edit_card, notify_user, refresh_order_cards, send_order_card
 from bot.states import AddProduct, EditPrice
 from bot.utils import (
@@ -26,7 +27,7 @@ from bot.utils import (
     parse_price,
 )
 
-HELP = (
+HELP = _(
     "<b>Админ-панель</b>\n\n"
     "<b>Каталог</b>\n"
     "/add — добавить товар\n"
@@ -63,12 +64,12 @@ async def _send_admin_card(message: Message, cfg: Config, p) -> None:
 @router.message(StateFilter(AddProduct, EditPrice), F.text.in_(kb.MENU_BUTTONS | {kb.BTN_CANCEL}))
 async def wizard_cancel(message: Message, state: FSMContext) -> None:
     await state.clear()
-    await message.answer("Отменено.", reply_markup=kb.main_menu())
+    await message.answer(_("Отменено."), reply_markup=kb.main_menu())
 
 
 @router.message(StateFilter(AddProduct, EditPrice), F.text.startswith("/"))
 async def wizard_command(message: Message) -> None:
-    await message.answer("Сначала закончите добавление или нажмите «✖️ Отмена».")
+    await message.answer(_("Сначала закончите добавление или нажмите «✖️ Отмена»."))
 
 
 @router.message(Command("admin"))
@@ -82,8 +83,8 @@ async def cmd_admin(message: Message) -> None:
 async def cmd_add(message: Message, state: FSMContext, db: Database) -> None:
     await state.clear()
     await state.set_state(AddProduct.category)
-    await message.answer("<b>Новый товар</b>", reply_markup=kb.input_kb())
-    await message.answer("Выберите категорию:", reply_markup=kb.admin_categories_kb(await db.all_categories()))
+    await message.answer(_("<b>Новый товар</b>"), reply_markup=kb.input_kb())
+    await message.answer(_("Выберите категорию:"), reply_markup=kb.admin_categories_kb(await db.all_categories()))
 
 
 @router.callback_query(AddProduct.category, kb.AdmCatCb.filter(), IsAdmin())
@@ -91,60 +92,60 @@ async def add_pick_category(cb: CallbackQuery, callback_data: kb.AdmCatCb, state
     await cb.answer()
     if callback_data.id == 0:
         await state.set_state(AddProduct.new_category)
-        await cb.message.answer("Название новой категории:")
+        await cb.message.answer(_("Название новой категории:"))
         return
     category = await db.get_category(callback_data.id)
     if category is None:
-        await cb.message.answer("Категория не найдена, выберите снова.")
+        await cb.message.answer(_("Категория не найдена, выберите снова."))
         return
     await state.update_data(category_id=category["id"])
     await state.set_state(AddProduct.name)
-    await cb.message.edit_text(f"Категория: <b>{escape(category['name'])}</b>")
-    await cb.message.answer("Название товара:")
+    await cb.message.edit_text(_("Категория: <b>{name}</b>", name=escape(category["name"])))
+    await cb.message.answer(_("Название товара:"))
 
 
 @router.message(AddProduct.new_category, F.text)
 async def add_new_category(message: Message, state: FSMContext, db: Database) -> None:
     name = " ".join(message.text.split())
     if not 1 <= len(name) <= 40:
-        await message.answer("Название категории — от 1 до 40 символов.")
+        await message.answer(_("Название категории — от 1 до 40 символов."))
         return
     await state.update_data(category_id=await db.get_or_create_category(name))
     await state.set_state(AddProduct.name)
-    await message.answer(f"Категория: <b>{escape(name)}</b>\n\nНазвание товара:")
+    await message.answer(_("Категория: <b>{name}</b>", name=escape(name)) + "\n\n" + _("Название товара:"))
 
 
 @router.message(AddProduct.name, F.text)
 async def add_name(message: Message, state: FSMContext) -> None:
     name = " ".join(message.text.split())
     if not 1 <= len(name) <= 64:
-        await message.answer("Название — от 1 до 64 символов.")
+        await message.answer(_("Название — от 1 до 64 символов."))
         return
     await state.update_data(name=name)
     await state.set_state(AddProduct.description)
-    await message.answer("Описание товара:", reply_markup=kb.input_kb(skip=True))
+    await message.answer(_("Описание товара:"), reply_markup=kb.input_kb(skip=True))
 
 
 @router.message(AddProduct.description, F.text)
 async def add_description(message: Message, state: FSMContext) -> None:
     description = "" if message.text == kb.BTN_SKIP else message.text.strip()
     if len(description) > 700:
-        await message.answer("Описание — не длиннее 700 символов.")
+        await message.answer(_("Описание — не длиннее 700 символов."))
         return
     await state.update_data(description=description)
     await state.set_state(AddProduct.price)
-    await message.answer("Цена (целое число):", reply_markup=kb.input_kb())
+    await message.answer(_("Цена (целое число):"), reply_markup=kb.input_kb())
 
 
 @router.message(AddProduct.price, F.text)
 async def add_price(message: Message, state: FSMContext) -> None:
     price = parse_price(message.text)
     if price is None:
-        await message.answer("Введите цену целым числом больше нуля, например 4990.")
+        await message.answer(_("Введите цену целым числом больше нуля, например 4990."))
         return
     await state.update_data(price=price)
     await state.set_state(AddProduct.photo)
-    await message.answer("Фото товара:", reply_markup=kb.input_kb(skip=True))
+    await message.answer(_("Фото товара:"), reply_markup=kb.input_kb(skip=True))
 
 
 @router.message(AddProduct.photo, F.photo | (F.text == kb.BTN_SKIP))
@@ -158,7 +159,7 @@ async def add_photo(message: Message, state: FSMContext, db: Database, cfg: Conf
         photo_id=message.photo[-1].file_id if message.photo else None,
     )
     await state.clear()
-    await message.answer("✅ Товар добавлен.", reply_markup=kb.main_menu())
+    await message.answer(_("✅ Товар добавлен."), reply_markup=kb.main_menu())
     await _send_admin_card(message, cfg, await db.get_product(product_id))
 
 
@@ -166,11 +167,11 @@ async def add_photo(message: Message, state: FSMContext, db: Database, cfg: Conf
 async def add_wrong_input(message: Message, state: FSMContext) -> None:
     current = await state.get_state()
     if current == AddProduct.photo.state:
-        await message.answer("Пришлите фото или нажмите «⏭ Пропустить».")
+        await message.answer(_("Пришлите фото или нажмите «⏭ Пропустить»."))
     elif current == AddProduct.category.state:
-        await message.answer("Выберите категорию кнопкой выше.")
+        await message.answer(_("Выберите категорию кнопкой выше."))
     else:
-        await message.answer("Ответьте текстом.")
+        await message.answer(_("Ответьте текстом."))
 
 
 # --- Управление товарами ---
@@ -179,7 +180,7 @@ async def add_wrong_input(message: Message, state: FSMContext) -> None:
 async def cmd_products(message: Message, db: Database, cfg: Config) -> None:
     products = await db.all_products()
     if not products:
-        await message.answer("Товаров нет. Добавьте: /add")
+        await message.answer(_("Товаров нет. Добавьте: /add"))
         return
     lines, current = [], None
     for p in products:
@@ -188,7 +189,7 @@ async def cmd_products(message: Message, db: Database, cfg: Config) -> None:
             lines.append(f"\n<b>{escape(current)}</b>")
         flags = ("🙈" if p["hidden"] else "") + ("" if p["in_stock"] else "❌")
         lines.append(f"/p{p['id']} · {escape(p['name'])} — {fmt_price(p['price'], cfg.currency)} {flags}".rstrip())
-    for chunk in chunk_lines(lines + ["", "🙈 скрыт · ❌ нет в наличии"]):
+    for chunk in chunk_lines(lines + ["", _("🙈 скрыт · ❌ нет в наличии")]):
         await message.answer(chunk.strip())
 
 
@@ -200,11 +201,11 @@ async def cmd_product(message: Message, db: Database, cfg: Config, command: Comm
     else:
         raw = (command.args or "").strip().lstrip("#") if command else ""
     if not raw.isdigit():
-        await message.answer("Формат: /p 12 или /p12")
+        await message.answer(_("Формат: /p 12 или /p12"))
         return
     p = await db.get_product(int(raw))
     if p is None:
-        await message.answer("Товар не найден.")
+        await message.answer(_("Товар не найден."))
         return
     await _send_admin_card(message, cfg, p)
 
@@ -215,14 +216,14 @@ async def product_action(
 ) -> None:
     p = await db.get_product(callback_data.id)
     if p is None or p["deleted"]:
-        await cb.answer("Товар удалён", show_alert=True)
+        await cb.answer(_("Товар удалён"), show_alert=True)
         return
     a = callback_data.a
     if a == "price":
         await state.set_state(EditPrice.price)
         await state.update_data(product_id=p["id"])
         await cb.message.answer(
-            f"Новая цена для «{escape(p['name'])}» (сейчас {fmt_price(p['price'], cfg.currency)}):",
+            _("Новая цена для «{name}» (сейчас {price}):", name=escape(p["name"]), price=fmt_price(p["price"], cfg.currency)),
             reply_markup=kb.input_kb(),
         )
         await cb.answer()
@@ -244,19 +245,19 @@ async def product_action(
         await db.delete_product(p["id"])
     p = await db.get_product(p["id"])
     await edit_card(cb.message, admin_caption(p, cfg), None if p["deleted"] else kb.admin_product_kb(p))
-    await cb.answer("Готово")
+    await cb.answer(_("Готово"))
 
 
 @router.message(EditPrice.price, F.text)
 async def edit_price(message: Message, state: FSMContext, db: Database, cfg: Config) -> None:
     price = parse_price(message.text)
     if price is None:
-        await message.answer("Введите цену целым числом больше нуля.")
+        await message.answer(_("Введите цену целым числом больше нуля."))
         return
     data = await state.get_data()
     await state.clear()
     await db.set_product(data["product_id"], "price", price)
-    await message.answer(f"Цена обновлена: {fmt_price(price, cfg.currency)}", reply_markup=kb.main_menu())
+    await message.answer(_("Цена обновлена: {price}", price=fmt_price(price, cfg.currency)), reply_markup=kb.main_menu())
     await _send_admin_card(message, cfg, await db.get_product(data["product_id"]))
 
 
@@ -266,13 +267,13 @@ async def edit_price(message: Message, state: FSMContext, db: Database, cfg: Con
 async def cmd_orders(message: Message, command: CommandObject, db: Database, cfg: Config) -> None:
     status = (command.args or "").strip() or None
     if status and status not in STATUSES:
-        await message.answer("Статусы: " + ", ".join(STATUSES))
+        await message.answer(_("Статусы: {list}", list=", ".join(STATUSES)))
         return
     orders = await db.recent_orders(10, status)
     if not orders:
-        await message.answer("Заказов нет.")
+        await message.answer(_("Заказов нет."))
         return
-    await message.answer("\n".join(order_short(o, cfg) for o in orders) + "\n\nПодробнее: /order ID")
+    await message.answer("\n".join(order_short(o, cfg) for o in orders) + "\n\n" + _("Подробнее: /order ID"))
 
 
 @router.message(Command("order"))
@@ -280,7 +281,7 @@ async def cmd_order(message: Message, command: CommandObject, db: Database, cfg:
     raw = (command.args or "").strip().lstrip("#")
     order = await db.get_order(int(raw)) if raw.isdigit() else None
     if order is None:
-        await message.answer("Формат: /order 12 (заказ должен существовать)")
+        await message.answer(_("Формат: /order 12 (заказ должен существовать)"))
         return
     await send_order_card(bot, db, cfg, order, message.chat.id)
 
@@ -289,24 +290,24 @@ async def cmd_order(message: Message, command: CommandObject, db: Database, cfg:
 async def cmd_export(message: Message, db: Database, cfg: Config) -> None:
     orders = await db.all_orders()
     if not orders:
-        await message.answer("Заказов нет.")
+        await message.answer(_("Заказов нет."))
         return
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=";")
-    w.writerow(["ID", "Создан", "Статус", "Клиент", "Телефон", "Telegram", "Получение", "Адрес",
-                "Комментарий", "Состав", "Товары", "Доставка", "Итого"])
+    w.writerow(["ID", _("Создан"), _("Статус"), _("Клиент"), _("Телефон"), "Telegram", _("Получение"), _("Адрес"),
+                _("Комментарий"), _("Состав"), _("Товары"), _("Доставка"), _("Итого")])
     for o in orders:
         items = await db.order_items(o["id"])
         w.writerow([
             o["id"], fmt_created(o["created_at"]), STATUS_PLAIN[o["status"]], o["client_name"], o["phone"],
             f"@{o['username']}" if o["username"] else f"id {o['user_id']}",
-            "Доставка" if o["delivery"] == "delivery" else "Самовывоз", o["address"] or "", o["comment"] or "",
+            _("Доставка") if o["delivery"] == "delivery" else _("Самовывоз"), o["address"] or "", o["comment"] or "",
             ", ".join(f"{i['name']} × {i['qty']}" for i in items),
             o["items_total"], o["delivery_price"], o["total"],
         ])
     await message.answer_document(
         BufferedInputFile(buf.getvalue().encode("utf-8-sig"), filename=f"orders-{now_local(cfg):%Y%m%d-%H%M}.csv"),
-        caption=f"Заказов: {len(orders)}",
+        caption=_("Заказов: {n}", n=len(orders)),
     )
 
 
@@ -314,14 +315,17 @@ async def cmd_export(message: Message, db: Database, cfg: Config) -> None:
 async def cmd_stats(message: Message, db: Database, cfg: Config) -> None:
     now = now_local(cfg)
     today = datetime.combine(now.date(), time.min)
-    lines = ["<b>Продажи</b> (без отменённых)\n"]
-    for title, since in (("Сегодня", today), ("7 дней", today - timedelta(days=6)), ("30 дней", today - timedelta(days=29))):
+    lines = [_("<b>Продажи</b> (без отменённых)") + "\n"]
+    periods = ((_("Сегодня"), today), (_("7 дней"), today - timedelta(days=6)), (_("30 дней"), today - timedelta(days=29)))
+    for title, since in periods:
         count, revenue = await db.stats_since(since)
-        lines.append(f"{title}: {count} зак. · {fmt_price(revenue, cfg.currency)}")
+        lines.append(_("{period}: {count} зак. · {revenue}", period=title, count=count,
+                       revenue=fmt_price(revenue, cfg.currency)))
     top = await db.top_products(today - timedelta(days=29))
     if top:
-        lines.append("\n<b>Топ товаров за 30 дней</b>")
-        lines += [f"{n}. {escape(t['name'])} — {t['qty']} шт · {fmt_price(t['revenue'], cfg.currency)}"
+        lines.append("\n" + _("<b>Топ товаров за 30 дней</b>"))
+        lines += [_("{n}. {name} — {qty} шт · {revenue}", n=n, name=escape(t["name"]), qty=t["qty"],
+                    revenue=fmt_price(t["revenue"], cfg.currency))
                   for n, t in enumerate(top, 1)]
     await message.answer("\n".join(lines))
 
@@ -335,17 +339,17 @@ async def change_status(cb: CallbackQuery, callback_data: kb.OrderCb, db: Databa
     current = await db.get_order(callback_data.id)
     own_demo = cfg.demo_mode and current is not None and current["user_id"] == cb.from_user.id
     if cb.from_user.id not in cfg.admin_ids and not in_orders_chat and not own_demo:
-        await cb.answer("Нет доступа", show_alert=True)
+        await cb.answer(_("Нет доступа"), show_alert=True)
         return
     if callback_data.s not in STATUSES:
         await cb.answer()
         return
     if not await db.set_status(callback_data.id, callback_data.s, now_local(cfg)):
-        await cb.answer("Статус уже установлен" if await db.get_order(callback_data.id) else "Заказ не найден")
+        await cb.answer(_("Статус уже установлен") if await db.get_order(callback_data.id) else _("Заказ не найден"))
         return
     order = await db.get_order(callback_data.id)
     await refresh_order_cards(bot, db, cfg, order)
-    await cb.answer(f"Статус: {STATUSES[order['status']]}")
+    await cb.answer(_("Статус: {status}", status=STATUSES[order["status"]]))
     text = client_status_text(order["status"], order["delivery"])
     if text:
-        await notify_user(bot, order["user_id"], f"Ваш заказ #{order['id']} {text}")
+        await notify_user(bot, order["user_id"], _("Ваш заказ #{id} {status}", id=order["id"], status=text))
